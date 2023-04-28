@@ -1,4 +1,4 @@
-CC = c99
+CC = gcc
 CFLAGS = -Wall -I../mikelibc
 COBJS = connmon_client.o
 SOBJS = connmon_server.o

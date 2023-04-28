@@ -106,10 +106,40 @@ main(int argc, char *argv[]) {
     bzero(leftover, MAX_MSG);
 
     setloggertype(LOGGER_STDOUT, NULL);
-    setloggersev(MLOG_DEBUG);
+    setloggersev(MLOG_INFO);
 
-    logmsg(MLOG_INFO, "connecting to localhost:5150");
-    int sockfd = connect_tcp_client("localhost", "5150");
+    char *connect_ip = NULL;
+    char *connect_port = NULL;
+    int opt;
+    int reconnect = 0;
+
+    char *usage = "Usage: connmon_server <-i connect ip> <-p connect port> [-d]\n";
+    if (argc < 3) {
+        fprintf(stderr, usage);
+        exit(1);
+    }
+    while ((opt = getopt(argc, argv, "i:p:dr")) != -1) {
+        switch (opt) {
+            case 'i':
+                connect_ip = optarg;
+                break;
+            case 'p':
+                connect_port = optarg;
+                break;
+            case 'd':
+                setloggersev(MLOG_DEBUG);
+                break;
+            case 'r':
+                reconnect = 1;
+                break;
+            default:
+                logmsg(MLOG_ERROR, "Unknown option");
+                exit(1);
+        }
+    }
+
+    logmsg(MLOG_INFO, "connecting to %s:%s", connect_ip, connect_port);
+    int sockfd = connect_tcp_client(connect_ip, connect_port);
 
     if (sockfd > 0) {
         logmsg(MLOG_INFO, "connected");
@@ -123,11 +153,18 @@ main(int argc, char *argv[]) {
         exit(2);
     } else {
         logmsg(MLOG_INFO, "message received: %s", msg);
+        printf("%s\n", msg);
+        fflush(stdout);
     }
 
-    if (! ping_pong_loop(sockfd)) {
-        logmsg(MLOG_ERROR, "ping_pong_loop returned an error");
-        exit(2);
+    for (;;) {
+        int rv = ping_pong_loop(sockfd);
+        if (! rv) {
+            logmsg(MLOG_ERROR, "ping_pong_loop returned an error");
+            if (! reconnect) {
+                exit(2);
+            }
+        }
     }
 
     exit(0);

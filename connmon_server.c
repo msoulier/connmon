@@ -16,6 +16,7 @@
 
 // 4 chars + \r\n
 const size_t PING_SIZE = 6;
+const size_t QUEUE_SIZE = 5;
 
 int
 accept_one(int sockfd) {
@@ -37,14 +38,10 @@ accept_one(int sockfd) {
     logmsg(MLOG_INFO, "Client connection from %s:%d", client_address, htons(client.sin_port));
 
     // Immediately write the client ip to the client.
-    ssize_t bytes = send(new_sockfd, client_address, len, 0);
+    ssize_t bytes = send(new_sockfd, client_address, strnlen(client_address, INET_ADDRSTRLEN), 0);
     logmsg(MLOG_DEBUG, "wrote %d bytes to client", bytes);
     if (bytes < 0) {
         logmsg(MLOG_ERROR, "write error: %s", strerror(errno));
-        close(new_sockfd);
-        new_sockfd = 0;
-    } else if (bytes != len) {
-        logmsg(MLOG_ERROR, "expected to write %d bytes but wrote %d instead - closing", len, bytes);
         close(new_sockfd);
         new_sockfd = 0;
     } else {
@@ -93,10 +90,41 @@ handle_pingpong(int sockfd) {
 int
 main(int argc, char *argv[]) {
     setloggertype(LOGGER_STDOUT, NULL);
-    setloggersev(MLOG_DEBUG);
+    setloggersev(MLOG_INFO);
 
-    logmsg(MLOG_INFO, "Listening on 0.0.0.0:5150");
-    int sockfd = setup_tcp_server("0.0.0.0", 5150, 10);
+    char *listen_ip = NULL;
+    int listen_port = 0;
+    int opt;
+
+    char *usage = "Usage: connmon_server <-i listen ip> <-p listen port> [-d]\n";
+    if (argc < 3) {
+        fprintf(stderr, usage);
+        exit(1);
+    }
+    while ((opt = getopt(argc, argv, "i:p:d")) != -1) {
+        switch (opt) {
+            case 'i':
+                listen_ip = optarg;
+                break;
+            case 'p':
+                listen_port = atoi(optarg);
+                break;
+            case 'd':
+                setloggersev(MLOG_DEBUG);
+                break;
+            default:
+                logmsg(MLOG_ERROR, "Unknown option");
+                exit(1);
+        }
+    }
+
+    if (listen_port == 0) {
+        logmsg(MLOG_ERROR, "listen_port must be > 0");
+        exit(1);
+    }
+
+    logmsg(MLOG_INFO, "Listening on %s:%d", listen_ip, listen_port);
+    int sockfd = setup_tcp_server(listen_ip, listen_port, QUEUE_SIZE);
 
     for (;;) {
         int new_sockfd = accept_one(sockfd);

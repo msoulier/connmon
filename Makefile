@@ -1,12 +1,16 @@
 CC = c99
-CFLAGS = -Wall -I../mikelibc -g -gdwarf-4 -DDEBUG -O0 -fno-omit-frame-pointer
+CFLAGS = -Wall -I../mikelibc
 COBJS = connmon_client.o
 SOBJS = connmon_server.o
-LIBS = -lasan -lpthread -lmike -ltai
+LIBS = -lpthread -lmike -ltai
 LDFLAGS = -L../mikelibc
 
+ifeq ($(CPP),1)
+	CFLAGS += -E
+endif
+
 ifeq ($(DEBUG),1)
-	CFLAGS += -ggdb -fsanitize=address
+	CFLAGS += -ggdb
 endif
 
 all: mikelibc connmon_client connmon_server

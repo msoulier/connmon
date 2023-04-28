@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -36,7 +37,7 @@ accept_one(int sockfd) {
     logmsg(MLOG_INFO, "Client connection from %s:%d", client_address, htons(client.sin_port));
 
     // Immediately write the client ip to the client.
-    ssize_t bytes = write(new_sockfd, client_address, len);
+    ssize_t bytes = send(new_sockfd, client_address, len, 0);
     logmsg(MLOG_DEBUG, "wrote %d bytes to client", bytes);
     if (bytes < 0) {
         logmsg(MLOG_ERROR, "write error: %s", strerror(errno));
@@ -48,7 +49,7 @@ accept_one(int sockfd) {
         new_sockfd = 0;
     } else {
         // Finish with a \r\n
-        write(new_sockfd, "\r\n", 2);
+        send(new_sockfd, "\r\n", 2, 0);
     }
 
     return new_sockfd;
@@ -65,7 +66,7 @@ handle_pingpong(int sockfd) {
     bzero(msg, PING_SIZE);
     // Loop until the entire message arrives.
     while (remaining > 0) {
-        ssize_t bytes = read(sockfd, buffer, remaining);
+        ssize_t bytes = recv(sockfd, buffer, remaining, 0);
         remaining -= bytes;
         logmsg(MLOG_DEBUG, "read %d bytes, remaining is %d", bytes, remaining);
         assert( remaining >= 0 );
@@ -79,7 +80,7 @@ handle_pingpong(int sockfd) {
     logmsg(MLOG_DEBUG, "composed final message: %s", msg);
     if (strncmp(msg, "PING\r\n", PING_SIZE) == 0) {
         logmsg(MLOG_DEBUG, "sending a PONG");
-        ssize_t bytes = write(sockfd, "PONG\r\n", PING_SIZE);
+        ssize_t bytes = send(sockfd, "PONG\r\n", PING_SIZE, 0);
         logmsg(MLOG_DEBUG, "wrote %d bytes", bytes);
         assert( bytes == PING_SIZE );
         return 1;

@@ -9,14 +9,24 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <assert.h>
+#include <pthread.h>
 
 #include "mlogger.h"
 #include "mdebug.h"
 #include "mnet.h"
+#include "madt.h"
 
 // 4 chars + \r\n
 const size_t PING_SIZE = 6;
 const size_t QUEUE_SIZE = 5;
+
+typedef struct thread_info {
+    pthread_t thread_id;
+    int       thread_num;
+    int       sockfd;
+    int       running;
+    struct thread_info *next;
+} threadinfo_t;
 
 int
 accept_one(int sockfd) {
@@ -54,6 +64,7 @@ accept_one(int sockfd) {
 
 int
 handle_pingpong(int sockfd) {
+    logmsg(MLOG_DEBUG, "in handle_pingpong on fd %d", sockfd);
     // Wait for a PING\r\n, and respond with PONG\r\n.
     char buffer[PING_SIZE];
     char msg[PING_SIZE];
@@ -87,6 +98,53 @@ handle_pingpong(int sockfd) {
     }
 }
 
+static void *
+thread_start(void *arg) {
+
+    threadinfo_t *tinfo = (struct thread_info*)arg;
+    logmsg(MLOG_INFO, "handler for thread id %d starting", tinfo->thread_id);
+    // Now, with this client, stay in a hopefully infinite loop sending
+    // PING/PONG back and forth with waits in-between, to keep the
+    // connection open.
+    for (;;) {
+        logmsg(MLOG_DEBUG, "calling handle_pingpong on fd %d", tinfo->sockfd);
+        if (! handle_pingpong(tinfo->sockfd)) {
+            logmsg(MLOG_ERROR, "handle_pingpong returned an error - tearing down");
+            shutdown(tinfo->sockfd, SHUT_RDWR);
+            close(tinfo->sockfd);
+            break;
+        }
+    }
+    logmsg(MLOG_INFO, "thread %d exiting", tinfo->thread_id);
+    tinfo->running = 0;
+    return arg;
+}
+
+int
+check(threadinfo_t *handle, threadinfo_t *current) {
+    if (handle->running == 0) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+void
+housekeeping(threadinfo_t *tinfo, threadinfo_t *current) {
+    threadinfo_t *previous, *freenode, *handle;
+    previous = freenode = handle = NULL;
+    logmsg(MLOG_DEBUG, "housekeeping running");
+    for (;;) {
+        freenode = NULL;
+        mlinked_list_remove(tinfo, current, previous, freenode, check, handle);
+        if (freenode != NULL) {
+            logmsg(MLOG_INFO, "found a stopped thread: %d", freenode->thread_id);
+            pthread_join(freenode->thread_id, NULL);
+            free(freenode);
+        }
+    }
+}
+
 int
 main(int argc, char *argv[]) {
     setloggertype(LOGGER_STDOUT, NULL);
@@ -95,6 +153,8 @@ main(int argc, char *argv[]) {
     char *listen_ip = NULL;
     int listen_port = 0;
     int opt;
+    threadinfo_t *tinfo = NULL;
+    threadinfo_t *current_thread = NULL;
 
     char *usage = "Usage: connmon_server <-i listen ip> <-p listen port> [-d]\n";
     if (argc < 3) {
@@ -128,17 +188,24 @@ main(int argc, char *argv[]) {
 
     for (;;) {
         int new_sockfd = accept_one(sockfd);
-        // Now, with this client, stay in a hopefully infinite loop sending
-        // PING/PONG back and forth with waits in-between, to keep the connection
-        // open.
-        for (;;) {
-            if (! handle_pingpong(new_sockfd)) {
-                logmsg(MLOG_ERROR, "handle_pingpong returned an error - tearing down");
-                shutdown(new_sockfd, SHUT_RDWR);
-                close(new_sockfd);
-                break;
-            }
+
+        threadinfo_t *new_thread = (threadinfo_t*)malloc(sizeof(struct thread_info));
+        assert( new_thread != NULL );
+
+        new_thread->sockfd = new_sockfd;
+        new_thread->running = 1;
+
+        mlinked_list_add(tinfo, new_thread, current_thread);
+
+        // Now start a handler thread for this client.
+        int rv = pthread_create(&new_thread->thread_id, NULL,
+                                &thread_start, new_thread);
+        if (rv != 0) {
+            perror("pthread_create");
+            close(new_sockfd);
         }
+
+        housekeeping(tinfo, current_thread);
     }
 
     return 0;

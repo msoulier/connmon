@@ -16,6 +16,8 @@
 const size_t MAX_MSG = 32;
 const int SLEEP_TIME = 30;
 
+#define MAX_PATH 1024
+
 char *
 read_msg(int sockfd, char *msg, char *leftover) {
     char buffer[MAX_MSG];
@@ -98,6 +100,29 @@ ping_pong_loop(int sockfd) {
     }
 }
 
+void
+store_pubip(char *msg) {
+    // Defaults to $HOME/.connmon_pubip
+    char *home = getenv("HOME");
+    char path[MAX_PATH];
+    if (home == NULL) {
+        // Default to null string so we use the current directory
+        logmsg(MLOG_WARNING, "no HOME environment variable - please set");
+        strcpy(path, "");
+        strcat(path, ".connmon_pubip");
+    } else {
+        strncpy(path, home, MAX_PATH);
+        strcat(path, "/.connmon_pubip");
+    }
+    FILE *pfile = NULL;
+    if ((pfile = fopen(path, "w")) == NULL) {
+        logmsg(MLOG_ERROR, "fopen of %s failed: %s", path, strerror(errno));
+        return;
+    }
+    fprintf(pfile, "%s\n", msg);
+    fclose(pfile);
+}
+
 int
 main(int argc, char *argv[]) {
     char leftover[MAX_MSG];
@@ -153,8 +178,8 @@ main(int argc, char *argv[]) {
         logmsg(MLOG_ERROR, "error reading next message");
         exit(2);
     } else {
-        logmsg(MLOG_INFO, "message received: %s", msg);
-        printf("%s\n", msg);
+        logmsg(MLOG_INFO, "received first message: '%s'", msg);
+        store_pubip(msg);
         fflush(stdout);
     }
 

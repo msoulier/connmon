@@ -66,8 +66,8 @@ int
 handle_pingpong(int sockfd) {
     logmsg(MLOG_DEBUG, "in handle_pingpong on fd %d", sockfd);
     // Wait for a PING\r\n, and respond with PONG\r\n.
-    char buffer[PING_SIZE];
-    char msg[PING_SIZE];
+    char buffer[PING_SIZE+1];
+    char msg[PING_SIZE+1];
     size_t remaining = PING_SIZE;
     // Initialize the two buffers
     bzero(buffer, PING_SIZE);
@@ -100,9 +100,8 @@ handle_pingpong(int sockfd) {
 
 static void *
 thread_start(void *arg) {
-
-    threadinfo_t *tinfo = (struct thread_info*)arg;
-    logmsg(MLOG_INFO, "handler for thread id %d starting", tinfo->thread_id);
+    threadinfo_t *tinfo = (threadinfo_t*)arg;
+    logmsg(MLOG_INFO, "handler for thread id %u starting", tinfo->thread_id);
     // Now, with this client, stay in a hopefully infinite loop sending
     // PING/PONG back and forth with waits in-between, to keep the
     // connection open.
@@ -115,14 +114,18 @@ thread_start(void *arg) {
             break;
         }
     }
-    logmsg(MLOG_INFO, "thread %d exiting", tinfo->thread_id);
+    logmsg(MLOG_INFO, "thread %u exiting", tinfo->thread_id);
     tinfo->running = 0;
     return arg;
 }
 
 int
 check(threadinfo_t *handle, threadinfo_t *current) {
-    if (handle->running == 0) {
+    assert( handle == NULL );
+    assert( current != NULL );
+    logmsg(MLOG_DEBUG, "in check: thread_id and running: %u %d",
+            current->thread_id, current->running);
+    if (current->running == 0) {
         return 1;
     } else {
         return 0;
@@ -131,18 +134,31 @@ check(threadinfo_t *handle, threadinfo_t *current) {
 
 void
 housekeeping(threadinfo_t *tinfo, threadinfo_t *current) {
+    assert( tinfo != NULL );
     threadinfo_t *previous, *freenode, *handle;
     previous = freenode = handle = NULL;
     logmsg(MLOG_DEBUG, "housekeeping running");
+    int found = 0;
     for (;;) {
         freenode = NULL;
         mlinked_list_remove(tinfo, current, previous, freenode, check, handle);
-        if (freenode != NULL) {
-            logmsg(MLOG_INFO, "found a stopped thread: %d", freenode->thread_id);
+        if (freenode == NULL) {
+            break;
+        } else {
+            logmsg(MLOG_DEBUG, "found a stopped thread: %u", freenode->thread_id);
+            int length = 0;
+            mlinked_list_length(tinfo, current, length);
+            logmsg(MLOG_DEBUG, "list length is %d after remove", length);
             pthread_join(freenode->thread_id, NULL);
             free(freenode);
+            found++;
         }
     }
+    char plural = 's';
+    if (found == 1) {
+        plural = 0;
+    }
+    logmsg(MLOG_DEBUG, "cleaned %d thread%c", found, plural);
 }
 
 int
@@ -154,7 +170,7 @@ main(int argc, char *argv[]) {
     int listen_port = 0;
     int opt;
     threadinfo_t *tinfo = NULL;
-    threadinfo_t *current_thread = NULL;
+    threadinfo_t *current = NULL;
 
     char *usage = "Usage: connmon_server <-i listen ip> <-p listen port> [-d]\n";
     if (argc < 3) {
@@ -191,11 +207,18 @@ main(int argc, char *argv[]) {
 
         threadinfo_t *new_thread = (threadinfo_t*)malloc(sizeof(struct thread_info));
         assert( new_thread != NULL );
+        bzero(new_thread, sizeof(threadinfo_t));
 
         new_thread->sockfd = new_sockfd;
         new_thread->running = 1;
 
-        mlinked_list_add(tinfo, new_thread, current_thread);
+        mlinked_list_add(tinfo, new_thread, current);
+        assert( tinfo != NULL );
+        assert( current != NULL );
+        logmsg(MLOG_DEBUG, "new_thread->running is %d", new_thread->running);
+        int length = 0;
+        mlinked_list_length(tinfo, current, length);
+        logmsg(MLOG_DEBUG, "list length is %d after add", length);
 
         // Now start a handler thread for this client.
         int rv = pthread_create(&new_thread->thread_id, NULL,
@@ -204,8 +227,9 @@ main(int argc, char *argv[]) {
             perror("pthread_create");
             close(new_sockfd);
         }
-
-        housekeeping(tinfo, current_thread);
+        if (tinfo != NULL) {
+            housekeeping(tinfo, current);
+        }
     }
 
     return 0;

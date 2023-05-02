@@ -2,15 +2,15 @@ CC = gcc
 CFLAGS = -Wall -I../mikelibc
 COBJS = connmon_client.o
 SOBJS = connmon_server.o
-LIBS = -lpthread -lmike -ltai
+LIBS = -lasan -lpthread -lmike -ltai
 LDFLAGS = -L../mikelibc
 
 ifeq ($(CPP),1)
 	CFLAGS += -E
 endif
 
-ifeq ($(DEBUG),1)
-	CFLAGS += -ggdb
+ifeq ($(MDEBUG),1)
+	CFLAGS += -ggdb -fsanitize=address
 endif
 
 all: mikelibc connmon_client connmon_server
@@ -22,7 +22,7 @@ help:
 	@echo "LIBS is $(LIBS)"
 
 mikelibc:
-	cd ../mikelibc&& make DEBUG=$(DEBUG)
+	cd ../mikelibc&& make MDEBUG=$(MDEBUG) MTHREADS=1
 
 connmon_client: $(COBJS)
 	$(CC) -o connmon_client $(LDFLAGS) $(COBJS) $(LIBS)

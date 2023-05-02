@@ -145,6 +145,7 @@ main(int argc, char *argv[]) {
         logmsg(MLOG_INFO, "connected");
     } else {
         logmsg(MLOG_ERROR, "failed to connect");
+        exit(2);
     }
 
     bzero(msg, MAX_MSG);

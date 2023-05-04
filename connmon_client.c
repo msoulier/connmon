@@ -100,35 +100,73 @@ ping_pong_loop(int sockfd) {
     }
 }
 
-void
-store_pubip(char *msg) {
+char *
+pubip_path(char *buffer) {
     // Defaults to $HOME/.connmon_pubip
     char *home = getenv("HOME");
-    char path[MAX_PATH];
     if (home == NULL) {
         // Default to null string so we use the current directory
         logmsg(MLOG_WARNING, "no HOME environment variable - please set");
-        strcpy(path, "");
-        strcat(path, ".connmon_pubip");
+        strcpy(buffer, "");
+        strcat(buffer, ".connmon_pubip");
     } else {
-        strncpy(path, home, MAX_PATH);
-        strcat(path, "/.connmon_pubip");
+        strncpy(buffer, home, MAX_PATH);
+        strcat(buffer, "/.connmon_pubip");
     }
+    return buffer;
+}
+
+int
+load_pubip(char *addr) {
+    char path[MAX_PATH];
+    pubip_path(path);
+
+    FILE *pfile = NULL;
+    if ((pfile = fopen(path, "r")) == NULL) {
+        logmsg(MLOG_ERROR, "fopen of %s failed: %s", path, strerror(errno));
+        return 0;
+    }
+    fgets(addr, MAX_PATH, pfile);
+    fclose(pfile);
+    // Clear the newline.
+    int length = strnlen(addr, MAX_PATH);
+    if (addr[length-1] == '\n') {
+        addr[length-1] = '\0';
+    }
+    return 1;
+}
+
+int
+store_pubip(char *msg) {
+    char path[MAX_PATH];
+    pubip_path(path);
+
     FILE *pfile = NULL;
     if ((pfile = fopen(path, "w")) == NULL) {
         logmsg(MLOG_ERROR, "fopen of %s failed: %s", path, strerror(errno));
-        return;
+        return 0;
     }
     fprintf(pfile, "%s\n", msg);
     fclose(pfile);
+    return 1;
+}
+
+void
+ipchange(char *newip, char *oldip) {
+    logmsg(MLOG_INFO, "****************** IP Change ********************");
+    logmsg(MLOG_INFO, "old = %s", oldip);
+    logmsg(MLOG_INFO, "new = %s", newip);
+    // FIXME: what else? take some other action?
 }
 
 int
 main(int argc, char *argv[]) {
     char leftover[MAX_MSG];
     char msg[MAX_MSG];
+    char oldip[MAX_MSG];
 
     bzero(leftover, MAX_MSG);
+    bzero(oldip, MAX_MSG);
 
     setloggertype(LOGGER_STDOUT, NULL);
     setloggersev(MLOG_INFO);
@@ -163,6 +201,12 @@ main(int argc, char *argv[]) {
         }
     }
 
+    if (load_pubip(oldip)) {
+        logmsg(MLOG_INFO, "loaded old IP: %s", oldip);
+    } else {
+        logmsg(MLOG_INFO, "no old IP found");
+    }
+
     logmsg(MLOG_INFO, "connecting to %s:%s", connect_ip, connect_port);
     int sockfd = connect_tcp_client(connect_ip, connect_port);
 
@@ -180,6 +224,9 @@ main(int argc, char *argv[]) {
     } else {
         logmsg(MLOG_INFO, "received first message: '%s'", msg);
         store_pubip(msg);
+        if (strncmp(msg, oldip, MAX_MSG) != 0) {
+            ipchange(msg, oldip);
+        }
         fflush(stdout);
     }
 

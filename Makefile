@@ -2,8 +2,8 @@ CC = gcc
 CFLAGS = -Wall -I../mikelibc
 COBJS = connmon_client.o
 SOBJS = connmon_server.o
-LIBS = -lasan -lpthread -lmike -ltai
 LDFLAGS = -L../mikelibc
+LIBS=
 
 ifeq ($(CPP),1)
 	CFLAGS += -E
@@ -11,7 +11,10 @@ endif
 
 ifeq ($(MDEBUG),1)
 	CFLAGS += -ggdb -fsanitize=address
+	LIBS = -lasan
 endif
+
+LIBS += -lpthread -lmike -ltai
 
 all: mikelibc connmon_client connmon_server
 

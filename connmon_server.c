@@ -25,11 +25,12 @@ typedef struct thread_info {
     int       thread_num;
     int       sockfd;
     int       running;
+    char      address[128];
     struct thread_info *next;
 } threadinfo_t;
 
 int
-accept_one(int sockfd) {
+accept_one(int sockfd, threadinfo_t *thread) {
     struct sockaddr_in client;
     socklen_t len;
     char client_address[INET_ADDRSTRLEN];
@@ -46,6 +47,10 @@ accept_one(int sockfd) {
         strcpy(client_address, "Unknown");
     }
     logmsg(MLOG_INFO, "Client connection from %s:%d", client_address, htons(client.sin_port));
+
+    strcpy(thread->address, client_address);
+    thread->sockfd = new_sockfd;
+    thread->running = 1;
 
     // Immediately write the client ip to the client.
     ssize_t bytes = send(new_sockfd, client_address, strnlen(client_address, INET_ADDRSTRLEN), 0);
@@ -161,6 +166,28 @@ housekeeping(threadinfo_t *tinfo, threadinfo_t *current) {
     logmsg(MLOG_DEBUG, "cleaned %d thread%c", found, plural);
 }
 
+void
+connection_report(threadinfo_t *tinfo) {
+    logmsg(MLOG_INFO, "**************** Connection Report ****************");
+    if (tinfo == NULL) {
+        logmsg(MLOG_INFO, "No connected clients");
+    } else {
+        for (;;) {
+            logmsg(MLOG_INFO, "Connection from %s", tinfo->address);
+            if (tinfo->running) {
+                logmsg(MLOG_INFO, "Thread is running");
+            } else {
+                logmsg(MLOG_INFO, "Thread is not running");
+            }
+            tinfo = tinfo->next;
+            if (tinfo == NULL) {
+                break;
+            }
+        }
+    }
+    logmsg(MLOG_INFO, "**************** Connection Report ****************");
+}
+
 int
 main(int argc, char *argv[]) {
     setloggertype(LOGGER_STDOUT, NULL);
@@ -203,14 +230,11 @@ main(int argc, char *argv[]) {
     int sockfd = setup_tcp_server(listen_ip, listen_port, QUEUE_SIZE);
 
     for (;;) {
-        int new_sockfd = accept_one(sockfd);
-
         threadinfo_t *new_thread = (threadinfo_t*)malloc(sizeof(struct thread_info));
         assert( new_thread != NULL );
         bzero(new_thread, sizeof(threadinfo_t));
 
-        new_thread->sockfd = new_sockfd;
-        new_thread->running = 1;
+        int new_sockfd = accept_one(sockfd, new_thread);
 
         mlinked_list_add(tinfo, new_thread, current);
         assert( tinfo != NULL );
@@ -230,6 +254,7 @@ main(int argc, char *argv[]) {
         if (tinfo != NULL) {
             housekeeping(tinfo, current);
         }
+        connection_report(tinfo);
     }
 
     return 0;

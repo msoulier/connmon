@@ -172,8 +172,10 @@ connection_report(threadinfo_t *tinfo) {
     if (tinfo == NULL) {
         logmsg(MLOG_INFO, "No connected clients");
     } else {
+        int count = 0;
         for (;;) {
-            logmsg(MLOG_INFO, "Connection from %s", tinfo->address);
+            count++;
+            logmsg(MLOG_INFO, "Thread %d: Connection from %s", count, tinfo->address);
             if (tinfo->running) {
                 logmsg(MLOG_INFO, "Thread is running");
             } else {
@@ -185,7 +187,7 @@ connection_report(threadinfo_t *tinfo) {
             }
         }
     }
-    logmsg(MLOG_INFO, "**************** Connection Report ****************");
+    logmsg(MLOG_INFO, "***************************************************");
 }
 
 int

@@ -190,7 +190,7 @@ connection_report(threadinfo_t *tinfo) {
 
 int
 main(int argc, char *argv[]) {
-    setloggertype(LOGGER_STDOUT, NULL);
+    setloggertype(LOGGER_STDERR, NULL);
     setloggersev(MLOG_INFO);
 
     char *listen_ip = NULL;

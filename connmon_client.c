@@ -168,7 +168,7 @@ main(int argc, char *argv[]) {
     bzero(leftover, MAX_MSG);
     bzero(oldip, MAX_MSG);
 
-    setloggertype(LOGGER_STDOUT, NULL);
+    setloggertype(LOGGER_STDERR, NULL);
     setloggersev(MLOG_INFO);
 
     char *connect_ip = NULL;

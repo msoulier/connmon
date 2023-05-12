@@ -148,9 +148,14 @@ housekeeping(threadinfo_t *tinfo, threadinfo_t *current) {
         freenode = NULL;
         mlinked_list_remove(tinfo, current, previous, freenode, check, handle);
         if (freenode == NULL) {
+            if (found > 0) {
+                logmsg(MLOG_INFO, "housekeeping: didn't find any more stopped threads");
+            } else {
+                logmsg(MLOG_INFO, "housekeeping: didn't find any stopped threads at all");
+            }
             break;
         } else {
-            logmsg(MLOG_DEBUG, "found a stopped thread: %u", freenode->thread_id);
+            logmsg(MLOG_DEBUG, "housekeeping: found a stopped thread: %u", freenode->thread_id);
             int length = 0;
             mlinked_list_length(tinfo, current, length);
             logmsg(MLOG_DEBUG, "list length is %d after remove", length);
@@ -163,7 +168,7 @@ housekeeping(threadinfo_t *tinfo, threadinfo_t *current) {
     if (found == 1) {
         plural = 0;
     }
-    logmsg(MLOG_DEBUG, "cleaned %d thread%c", found, plural);
+    logmsg(MLOG_INFO, "cleaned %d thread%c", found, plural);
 }
 
 void

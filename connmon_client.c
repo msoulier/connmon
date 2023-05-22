@@ -208,7 +208,7 @@ main(int argc, char *argv[]) {
     }
 
     logmsg(MLOG_INFO, "connecting to %s:%s", connect_ip, connect_port);
-    int sockfd = connect_tcp_client(connect_ip, connect_port);
+    int sockfd = connect_tcp_client((const char*)connect_ip, (const char*)connect_port);
 
     if (sockfd > 0) {
         logmsg(MLOG_INFO, "connected");

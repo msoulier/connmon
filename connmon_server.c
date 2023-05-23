@@ -11,7 +11,7 @@
 #include <assert.h>
 #include <pthread.h>
 
-#include "mlogger.h"
+#include "mlog.h"
 #include "mdebug.h"
 #include "mnet.h"
 #include "madt.h"
@@ -38,15 +38,15 @@ accept_one(int sockfd, threadinfo_t *thread) {
 
     len = sizeof(client);
 
-    logmsg(MLOG_INFO, "Going into accept");
+    minfof("Going into accept");
     new_sockfd = accept(sockfd, (struct sockaddr*)&client, &len);
-    logmsg(MLOG_INFO, "Connection established");
+    minfof("Connection established");
 
     if (inet_ntop(AF_INET, &(client.sin_addr), client_address, INET_ADDRSTRLEN) == NULL) {
-        logmsg(MLOG_ERROR, "Failed to resolve client address: %s", strerror(errno));
+        merrorf("Failed to resolve client address: %s", strerror(errno));
         strcpy(client_address, "Unknown");
     }
-    logmsg(MLOG_INFO, "Client connection from %s:%d", client_address, htons(client.sin_port));
+    minfof("Client connection from %s:%d", client_address, htons(client.sin_port));
 
     strcpy(thread->address, client_address);
     thread->sockfd = new_sockfd;
@@ -54,9 +54,9 @@ accept_one(int sockfd, threadinfo_t *thread) {
 
     // Immediately write the client ip to the client.
     ssize_t bytes = send(new_sockfd, client_address, strnlen(client_address, INET_ADDRSTRLEN), 0);
-    logmsg(MLOG_DEBUG, "wrote %d bytes to client", bytes);
+    mdebugf("wrote %d bytes to client", bytes);
     if (bytes < 0) {
-        logmsg(MLOG_ERROR, "write error: %s", strerror(errno));
+        merrorf("write error: %s", strerror(errno));
         close(new_sockfd);
         new_sockfd = 0;
     } else {
@@ -69,7 +69,7 @@ accept_one(int sockfd, threadinfo_t *thread) {
 
 int
 handle_pingpong(int sockfd) {
-    logmsg(MLOG_DEBUG, "in handle_pingpong on fd %d", sockfd);
+    mdebugf("in handle_pingpong on fd %d", sockfd);
     // Wait for a PING\r\n, and respond with PONG\r\n.
     char buffer[PING_SIZE+1];
     char msg[PING_SIZE+1];
@@ -81,24 +81,24 @@ handle_pingpong(int sockfd) {
     while (remaining > 0) {
         ssize_t bytes = recv(sockfd, buffer, remaining, 0);
         remaining -= bytes;
-        logmsg(MLOG_DEBUG, "read %d bytes, remaining is %d", bytes, remaining);
+        mdebugf("read %d bytes, remaining is %d", bytes, remaining);
         assert( remaining >= 0 );
         if (bytes > 0) {
             strncat(msg, buffer, bytes);
         } else {
-            logmsg(MLOG_ERROR, "read 0 bytes!");
+            merrorf("read 0 bytes!");
             return 0;
         }
     }
-    logmsg(MLOG_DEBUG, "composed final message: %s", msg);
+    mdebugf("composed final message: %s", msg);
     if (strncmp(msg, "PING\r\n", PING_SIZE) == 0) {
-        logmsg(MLOG_DEBUG, "sending a PONG");
+        mdebugf("sending a PONG");
         ssize_t bytes = send(sockfd, "PONG\r\n", PING_SIZE, 0);
-        logmsg(MLOG_DEBUG, "wrote %d bytes", bytes);
+        mdebugf("wrote %d bytes", bytes);
         assert( bytes == PING_SIZE );
         return 1;
     } else {
-        logmsg(MLOG_ERROR, "Unknown message received: %s", msg);
+        merrorf("Unknown message received: %s", msg);
         return 0;
     }
 }
@@ -106,20 +106,20 @@ handle_pingpong(int sockfd) {
 static void *
 thread_start(void *arg) {
     threadinfo_t *tinfo = (threadinfo_t*)arg;
-    logmsg(MLOG_INFO, "handler for thread id %u starting", tinfo->thread_id);
+    minfof("handler for thread id %u starting", tinfo->thread_id);
     // Now, with this client, stay in a hopefully infinite loop sending
     // PING/PONG back and forth with waits in-between, to keep the
     // connection open.
     for (;;) {
-        logmsg(MLOG_DEBUG, "calling handle_pingpong on fd %d", tinfo->sockfd);
+        mdebugf("calling handle_pingpong on fd %d", tinfo->sockfd);
         if (! handle_pingpong(tinfo->sockfd)) {
-            logmsg(MLOG_ERROR, "handle_pingpong returned an error - tearing down");
+            merrorf("handle_pingpong returned an error - tearing down");
             shutdown(tinfo->sockfd, SHUT_RDWR);
             close(tinfo->sockfd);
             break;
         }
     }
-    logmsg(MLOG_INFO, "thread %u exiting", tinfo->thread_id);
+    minfof("thread %u exiting", tinfo->thread_id);
     tinfo->running = 0;
     return arg;
 }
@@ -128,7 +128,7 @@ int
 check(threadinfo_t *handle, threadinfo_t *current) {
     assert( handle == NULL );
     assert( current != NULL );
-    logmsg(MLOG_DEBUG, "in check: thread_id and running: %u %d",
+    mdebugf("in check: thread_id and running: %u %d",
             current->thread_id, current->running);
     if (current->running == 0) {
         return 1;
@@ -142,23 +142,23 @@ housekeeping(threadinfo_t *tinfo, threadinfo_t *current) {
     assert( tinfo != NULL );
     threadinfo_t *previous, *freenode, *handle;
     previous = freenode = handle = NULL;
-    logmsg(MLOG_DEBUG, "housekeeping running");
+    mdebugf("housekeeping running");
     int found = 0;
     for (;;) {
         freenode = NULL;
         mlinked_list_remove(tinfo, current, previous, freenode, check, handle);
         if (freenode == NULL) {
             if (found > 0) {
-                logmsg(MLOG_INFO, "housekeeping: didn't find any more stopped threads");
+                minfof("housekeeping: didn't find any more stopped threads");
             } else {
-                logmsg(MLOG_INFO, "housekeeping: didn't find any stopped threads at all");
+                minfof("housekeeping: didn't find any stopped threads at all");
             }
             break;
         } else {
-            logmsg(MLOG_DEBUG, "housekeeping: found a stopped thread: %u", freenode->thread_id);
+            mdebugf("housekeeping: found a stopped thread: %u", freenode->thread_id);
             int length = 0;
             mlinked_list_length(tinfo, current, length);
-            logmsg(MLOG_DEBUG, "list length is %d after remove", length);
+            mdebugf("list length is %d after remove", length);
             pthread_join(freenode->thread_id, NULL);
             free(freenode);
             found++;
@@ -168,23 +168,23 @@ housekeeping(threadinfo_t *tinfo, threadinfo_t *current) {
     if (found == 1) {
         plural = 0;
     }
-    logmsg(MLOG_INFO, "cleaned %d thread%c", found, plural);
+    minfof("cleaned %d thread%c", found, plural);
 }
 
 void
 connection_report(threadinfo_t *tinfo) {
-    logmsg(MLOG_INFO, "**************** Connection Report ****************");
+    minfof("**************** Connection Report ****************");
     if (tinfo == NULL) {
-        logmsg(MLOG_INFO, "No connected clients");
+        minfof("No connected clients");
     } else {
         int count = 0;
         for (;;) {
             count++;
-            logmsg(MLOG_INFO, "Thread %d: Connection from %s", count, tinfo->address);
+            minfof("Thread %d: Connection from %s", count, tinfo->address);
             if (tinfo->running) {
-                logmsg(MLOG_INFO, "Thread is running");
+                minfof("Thread is running");
             } else {
-                logmsg(MLOG_INFO, "Thread is not running");
+                minfof("Thread is not running");
             }
             tinfo = tinfo->next;
             if (tinfo == NULL) {
@@ -192,13 +192,13 @@ connection_report(threadinfo_t *tinfo) {
             }
         }
     }
-    logmsg(MLOG_INFO, "***************************************************");
+    minfof("***************************************************");
 }
 
 int
 main(int argc, char *argv[]) {
-    setloggertype(LOGGER_STDERR, NULL);
-    setloggersev(MLOG_INFO);
+    mlog_handle_t g_handle = get_mlogger(MLOG_STDERR, MLOG_INFO, LOCNOZONE);
+    assert( g_handle >= 0 );
 
     char *listen_ip = NULL;
     int listen_port = 0;
@@ -220,20 +220,20 @@ main(int argc, char *argv[]) {
                 listen_port = atoi(optarg);
                 break;
             case 'd':
-                setloggersev(MLOG_DEBUG);
+                setloggersev(g_handle, MLOG_DEBUG);
                 break;
             default:
-                logmsg(MLOG_ERROR, "Unknown option");
+                merrorf("Unknown option");
                 exit(1);
         }
     }
 
     if (listen_port == 0) {
-        logmsg(MLOG_ERROR, "listen_port must be > 0");
+        merrorf("listen_port must be > 0");
         exit(1);
     }
 
-    logmsg(MLOG_INFO, "Listening on %s:%d", listen_ip, listen_port);
+    minfof("Listening on %s:%d", listen_ip, listen_port);
     int sockfd = setup_tcp_server(listen_ip, listen_port, QUEUE_SIZE);
 
     for (;;) {
@@ -246,10 +246,10 @@ main(int argc, char *argv[]) {
         mlinked_list_add(tinfo, new_thread, current);
         assert( tinfo != NULL );
         assert( current != NULL );
-        logmsg(MLOG_DEBUG, "new_thread->running is %d", new_thread->running);
+        mdebugf("new_thread->running is %d", new_thread->running);
         int length = 0;
         mlinked_list_length(tinfo, current, length);
-        logmsg(MLOG_DEBUG, "list length is %d after add", length);
+        mdebugf("list length is %d after add", length);
 
         // Now start a handler thread for this client.
         int rv = pthread_create(&new_thread->thread_id, NULL,

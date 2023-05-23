@@ -14,7 +14,7 @@ ifeq ($(MDEBUG),1)
 	LIBS = -lasan
 endif
 
-LIBS += -lpthread -lmike -ltai
+LIBS += -lpthread -lmike
 
 all: mikelibc connmon_client connmon_server
 

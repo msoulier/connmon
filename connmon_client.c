@@ -79,6 +79,7 @@ ping_pong_loop(int sockfd) {
     bzero(leftover, MAX_MSG);
 
     for (;;) {
+        minfof("sending PING");
         int bytes = send(sockfd, "PING\r\n", 6, 0);
         mdebugf("sent %d bytes", bytes);
         assert( bytes == 6 );
@@ -91,7 +92,7 @@ ping_pong_loop(int sockfd) {
             minfof("message received: %s", msg);
         }
         if (strncmp(msg, "PONG", 4) == 0) {
-            mdebugf("PONG received, all is well - sleeping for %ds", SLEEP_TIME);
+            minfof("PONG received, all is well - sleeping for %ds", SLEEP_TIME);
             sleep(SLEEP_TIME);
         } else {
             merrorf("Unknown error received: %s", msg);
@@ -210,38 +211,51 @@ main(int argc, char *argv[]) {
         minfof("no old IP found");
     }
 
-    minfof("connecting to %s:%s", connect_ip, connect_port);
-    int sockfd = connect_tcp_client((const char*)connect_ip, (const char*)connect_port);
-
-    if (sockfd > 0) {
-        minfof("connected");
-    } else {
-        merrorf("failed to connect");
-        exit(2);
-    }
-
-    bzero(msg, MAX_MSG);
-    if (read_msg(sockfd, msg, leftover) == NULL) {
-        merrorf("error reading next message");
-        exit(2);
-    } else {
-        minfof("received first message: '%s'", msg);
-        store_pubip(msg);
-        if (strncmp(msg, oldip, MAX_MSG) != 0) {
-            ipchange(msg, oldip);
-        }
-        fflush(stdout);
-    }
-
     for (;;) {
-        int rv = ping_pong_loop(sockfd);
-        if (! rv) {
-            merrorf("ping_pong_loop returned an error");
-            if (! reconnect) {
+        minfof("connecting to %s:%s", connect_ip, connect_port);
+        int sockfd = connect_tcp_client((const char*)connect_ip, (const char*)connect_port);
+
+        if (sockfd > 0) {
+            minfof("connected");
+        } else {
+            merrorf("failed to connect");
+            if (reconnect) {
+                minfof("reconnect option set - sleeping for %ds", SLEEP_TIME);
+                sleep(SLEEP_TIME);
+                continue;
+            } else {
+                minfof("reconnect option not set - exiting");
                 exit(2);
             }
         }
-    }
 
+        bzero(msg, MAX_MSG);
+        if (read_msg(sockfd, msg, leftover) == NULL) {
+            merrorf("error reading next message");
+            exit(2);
+        } else {
+            minfof("received first message: '%s'", msg);
+            store_pubip(msg);
+            if (strncmp(msg, oldip, MAX_MSG) != 0) {
+                ipchange(msg, oldip);
+            }
+            fflush(stdout);
+        }
+
+        for (;;) {
+            int rv = ping_pong_loop(sockfd);
+            if (! rv) {
+                merrorf("ping_pong_loop returned an error");
+                if (reconnect) {
+                    minfof("reconnect option set - sleeping for %ds", SLEEP_TIME);
+                    sleep(SLEEP_TIME);
+                    break;
+                } else {
+                    minfof("reconnect option not set - exiting");
+                    exit(2);
+                }
+            }
+        }
+    }
     exit(0);
 }

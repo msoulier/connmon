@@ -233,6 +233,11 @@ main(int argc, char *argv[]) {
         exit(1);
     }
 
+    if (listen_ip == NULL) {
+        merrorf("you must provide a listen IP");
+        exit(1);
+    }
+
     minfof("Listening on %s:%d", listen_ip, listen_port);
     int sockfd = setup_tcp_server(listen_ip, listen_port, QUEUE_SIZE);
 

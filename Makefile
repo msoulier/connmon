@@ -16,7 +16,7 @@ endif
 
 LIBS += -lpthread -lmike
 
-all: mikelibc connmon_client connmon_server
+all: mikelibc cclient cserver
 
 help:
 	@echo "Targets: help all mikelibc connmon_client connmon_server"
@@ -27,11 +27,11 @@ help:
 mikelibc:
 	cd ../mikelibc&& make MDEBUG=$(MDEBUG) MTHREADS=1
 
-connmon_client: $(COBJS)
-	$(CC) -o connmon_client $(LDFLAGS) $(COBJS) $(LIBS)
+cclient: $(COBJS)
+	$(CC) -o cclient $(LDFLAGS) $(COBJS) $(LIBS)
 
-connmon_server: $(SOBJS)
-	$(CC) -o connmon_server $(LDFLAGS) $(SOBJS) $(LIBS)
+cserver: $(SOBJS)
+	$(CC) -o cserver $(LDFLAGS) $(SOBJS) $(LIBS)
 
 connmon_client.o: connmon_client.c ../mikelibc/mnet.h ../mikelibc/libmike.a
 	$(CC) $(CFLAGS) -c connmon_client.c
@@ -40,5 +40,5 @@ connmon_server.o: connmon_server.c ../mikelibc/mnet.h ../mikelibc/libmike.a
 	$(CC) $(CFLAGS) -c connmon_server.c
 
 clean:
-	rm -f *.o connmon_client connmon_server make.err
+	rm -f *.o cclient cserver make.err
 	(cd ../mikelibc && make clean)

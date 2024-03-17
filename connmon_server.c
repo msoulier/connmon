@@ -208,7 +208,7 @@ main(int argc, char *argv[]) {
 
     char *usage = "Usage: connmon_server <-i listen ip> <-p listen port> [-d]\n";
     if (argc < 3) {
-        fprintf(stderr, usage);
+        fputs(usage, stderr);
         exit(1);
     }
     while ((opt = getopt(argc, argv, "i:p:d")) != -1) {
